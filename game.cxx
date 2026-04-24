@@ -1,9 +1,16 @@
+#include <SDL2/SDL.h>
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <functional>
+#include <vector>
 #include "config.h"
 #include "Init.h"
-#include <SDL2/SDL.h>
 
 bool running = true;
 int test = 255; // 테스트용
+
+std::vector<Button*> button_list;
 
 int main(int argc, char *argv[])
 {
@@ -11,57 +18,101 @@ int main(int argc, char *argv[])
 	if (!Init()) return 1;
 	if (!Load()) return 1;
 	
+	Renderer renderer;
+	
+	SDL_Rect test_pos = {100, 1500, 300, 300};
+	color test_col = {200, 200, 200};
+	Button* tb = new Button(test_pos, test_col, "test");
+	tb->SetImage(images[IMG_BUTTON_LEFT]);
+	
+	SDL_Rect test_pos_2 = {700, 1500, 300, 300};
+	Button* tb_2 = new Button(test_pos_2, test_col, "test");
+	tb_2->SetImage(images[IMG_BUTTON_RIGHT]);
+	
+	button_list.push_back(tb);
+	button_list.push_back(tb_2);
 	
 	while (running) {
-	
-	Render();
-	
+		Input();
+		Update();
+		Render(renderer);
+		
+		SDL_Delay(60);
+	}
+	Kill();
+	return 0;	
+}
+
+// ================= Input =================
+
+void Input(){
 	while(SDL_PollEvent(&ev) != 0){
 		switch(ev.type){
 			case SDL_QUIT:
 				running = false;
 				break;
-			/*
-			case SDL_MOUSEBUTTONDOWN:
-				switch(ev.button.button)
-				{
-					case SDL_BUTTON_LEFT:
-						test = 0;
-						break;
-				}*/
+			case SDL_MOUSEMOTION:
+				mouse_x = ev.button.x;
+				mouse_y = ev.button.y;
+				break;
 			case SDL_FINGERDOWN:
-				test = 0;
+				isTouching = true;
 				break;
 			case SDL_FINGERUP:
-				test = 255;
+				isTouching = false;
 				break;
 		}
-		}
 	}
-	std::cout << test << std::endl;
-	Kill();
-	return 0;
 }
 
-void Render(){
-	SDL_Rect rect[3] = {
-		{200, 800, 100, 100},
-		{300, 300, 100, 500},
-		{400, 800, 100, 100}
-		};
+
+// ================= Update =================
+
+void Update(){	
+	for(int i = 0; i < button_list.size(); i++){
+		button_list[i]->Update();
+	}
+	
+}
+
+void Button::Update() {
+	CheckButtonPressed({mouse_x, mouse_y});
+}
+
+/*
+void Player::Update() {
+	
+}*/
+
+
+// ================= Render =================
+
+
+
+void Render(Renderer& renderer){
+	for(int i = 0; i < button_list.size(); i++){
+		button_list[i]->Draw(renderer);
+	}
+	
+	SDL_Rect background_transform = {100, 100, SCREEN_WIDTH - 200, SCREEN_HEIGHT - 1000};
 	
 	// 받아온 서피스 위에 그림을 그림
-	for(int i = 0; i < 3; i++){
-	SDL_FillRect(winSurface, &rect[i], SDL_MapRGB(winSurface->format, 255, 255, test));
-}
-	
+	renderer.DrawRectangle(&background_transform, {200, 200, 200});
+	/*
 	SDL_Rect dest = {600, 300, 300, 300};
 	
-	SDL_BlitScaled(images[IMG_TEST], NULL, winSurface, &dest);
+	SDL_BlitScaled(images[IMG_TEST], NULL, winSurface, &dest);*/
+	
 	
 	// 그림을 그린 서피스를 업데이트함
 	SDL_UpdateWindowSurface(window);
 }
+
+
+
+// ================= Init =================
+
+
 
 bool Init(){
 	// 가장 먼저 SDL 함수들을 초기화
@@ -86,28 +137,86 @@ bool Init(){
 	return true;
 }
 
+
+
+// ================= Renderer =================
+
+
+
+void Renderer::DrawImage(SDL_Surface* image, SDL_Rect* position) {
+	SDL_BlitScaled(image, NULL, winSurface, position);
+}
+
+
+void Renderer::DrawRectangle(SDL_Rect* position, color col) {
+	SDL_FillRect(winSurface, position, SDL_MapRGB(winSurface->format, col.r, col.g, col.b));
+}
+
+
+
+// ================= Load =================
+
+
+
 bool Load(){
-	SDL_Surface* temp = SDL_LoadBMP("sample.bmp");
+	loaded_image = 0;
+	for(int i = 0; i < IMAGE_NUMBER; i++){
+		SDL_Surface* temp = SDL_LoadBMP(image_list[i]);
+		if (!temp){
+			std::cout << "ERROR LOADING IMAGE! : " << SDL_GetError() << std::endl;
+			return false;
+		}
 	
-	if (!temp){
-		std::cout << "ERROR LOADING IMAGE! : " << SDL_GetError() << std::endl;
-		return false;
-	}
-	
-	images[IMG_TEST] = SDL_ConvertSurface(temp, winSurface->format, 0);
-	if (!images[IMG_TEST]){
+		
+		images[i] = SDL_ConvertSurface(temp, winSurface->format, 0);
+		if (!images[i]){
 		std::cout << "ERROR CONVERTING IMAGE! : " << SDL_GetError() << std::endl;
 		return false;
+		}
+	
+		SDL_FreeSurface(temp);
+		
+		loaded_image++;
 	}
-	
-	SDL_FreeSurface(temp);
-	
+
 	return true;
 }
 
-void Kill(){
-	for(int i = 0; i<IMAGE_NUMBER; i++){
-		SDL_FreeSurface(images[i]);
+/*
+constexpr int toIndex(Image_index img) {
+    return static_cast<int>(img);
+}
+
+
+SDL_Surface* TextureManager::Load(Image_index img){
+	SDL_Surface* loaded_image = image[toIndex(img)];
+	
+	SDL_Surface* temp = SDL_LoadBMP(path);
+	if (!temp){
+		std::cout << "ERROR LOADING IMAGE! : " << SDL_GetError() << std::endl;
+		return nullptr;
+	}
+	
+	SDL_Surface* image = SDL_ConvertSurface(temp, winSurface->format, 0);
+	if (!image){
+		std::cout << "ERROR CONVERTING IMAGE! : " << SDL_GetError() << std::endl;
+		return nullptr;
+	}
+	
+	images[loaded_image] = image;
+	SDL_FreeSurface(temp);
+	
+	return image; 
+}*/
+
+
+// ================= Kill =================
+
+
+
+void Kill(){	
+	for(int i = 0; i<button_list.size(); i++){
+		delete button_list[i];
 	}
 	
 	// 다 했으면 윈도우 파☆괴
@@ -117,23 +226,45 @@ void Kill(){
 	SDL_Quit();
 }
 
+
+
+// ================= Button =================
+
+
+
+void Button::Draw(Renderer& renderer) {
+	bool isPressed = GetPressedState();
+	color buttonColor = GetColor();
+	SDL_Rect transform = GetTransform(); 
+	
+	if(isPressed && isTouching){
+		int clamp_amount = 15;
+		color pressed_col = { std::clamp(buttonColor.r - clamp_amount, 15, 255), std::clamp(buttonColor.g  - clamp_amount, 15, 255), std::clamp(buttonColor.b  - clamp_amount, 15, 255)};
+		SDL_SetSurfaceColorMod(sprite, pressed_col.r, pressed_col.g, pressed_col.b);
+		renderer.DrawImage(sprite, &transform);
+	}
+	else {
+				SDL_SetSurfaceColorMod(sprite, 255, 255, 255);
+			renderer.DrawImage(sprite, &transform);
+	}
+}
+
+bool Button::CheckButtonPressed(pos pressed_pos) {
+	if (isPointFree(pressed_pos, GetTransform()))
+		isPressed = true;
+	else
+		isPressed = false;
+	return isPressed;
+}
+
+
+
+// ================= Other =================
+
+
+
 bool isPointFree(pos point, SDL_Rect target){
 	if (point.x < target.x + target.w && point.x > target.x && point.y < target.y + target.w && point.y > target.y) return true;
 	return false;
-}
-
-bool Button::isPressed(){
-	while(SDL_PollEvent(&ev) != 0){
-		switch(ev.type){
-			case SDL_FINGERDOWN:
-			{
-				int x = ev.tfinger.x * SCREEN_WIDTH;
-				int y = ev.tfinger.y * SCREEN_HEIGHT
-				if isPointFree({x, y}, Button.GetTransform())
-					return true;				
-				}
-				else return false;
-				}
-			} break;
-		}
+	std::cout << "FUCKED!" << std::endl;
 }
